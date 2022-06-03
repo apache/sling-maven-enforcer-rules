@@ -47,14 +47,14 @@
                         </goals>
                         <configuration>
                             <rules>
-                                <requireTransitiveProvidedDependenciesInRuntimeClasspath
-                                    implementation="org.apache.sling.maven.enforcer.RequireTransitiveProvidedDependenciesInRuntimeClasspath">
+                                <requireProvidedDependenciesInRuntimeClasspath
+                                    implementation="org.apache.sling.maven.enforcer.RequireProvidedDependenciesInRuntimeClasspath">
                                     <excludes>
                                         <exclude>*:h2</exclude>
                                         <exclude>org.codehaus.woodstox</exclude>
                                         <exclude>javax.servlet:javax.servlet-api:3.1.0</exclude>
                                     </excludes>
-                                </requireTransitiveProvidedDependenciesInRuntimeClasspath>
+                                </requireProvidedDependenciesInRuntimeClasspath>
                             </rules>
                             <fail>true</fail>
                         </configuration>

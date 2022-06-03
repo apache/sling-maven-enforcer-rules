@@ -74,7 +74,7 @@ import org.eclipse.aether.util.graph.visitor.TreeDependencyVisitor;
  * 
  * This check is useful to make sure that a Maven Plugin has access to all necessary classes at run time. 
  */
-public class RequireTransitiveProvidedDependenciesInRuntimeClasspath
+public class RequireProvidedDependenciesInRuntimeClasspath
         extends AbstractNonCacheableEnforcerRule implements EnforcerRule2 {
 
     /** Specify the banned dependencies. This can be a list of artifacts in the format <code>groupId[:artifactId][:version]</code>. Any of
@@ -186,7 +186,7 @@ public class RequireTransitiveProvidedDependenciesInRuntimeClasspath
 
     private static String dumpPaths(List<List<DependencyNode>> paths) {
         String via = paths.stream()
-                .map(RequireTransitiveProvidedDependenciesInRuntimeClasspath::dumpPath)
+                .map(RequireProvidedDependenciesInRuntimeClasspath::dumpPath)
                 .collect(Collectors.joining(" and "));
         if (via.isEmpty()) {
             return "direct";

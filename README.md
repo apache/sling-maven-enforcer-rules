@@ -16,10 +16,10 @@ It provides additional [Maven Enforcer](https://maven.apache.org/enforcer/maven-
 
 ## Rules
 
-### Require Transitive Provided Dependencies in Runtime Classpath
+### Require Provided Dependencies in Runtime Classpath
 
 Checks that the runtime classpath (e.g. used by Maven Plugins via the 
-[Plugin Classloader](https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders) or by the [Appassembler Maven Plugin's `assemble` goal](http://www.mojohaus.org/appassembler/appassembler-maven-plugin/assemble-mojo.html)) contains all transitive [provided dependencies](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html#Dependency_Scope).
+[Plugin Classloader](https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders) or by the [Appassembler Maven Plugin's `assemble` goal](http://www.mojohaus.org/appassembler/appassembler-maven-plugin/assemble-mojo.html)) contains all [provided dependencies](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html#Dependency_Scope) both direct and transitive ones.
 
 As those are not transitively inherited they need to be declared explicitly in the pom.xml of the using Maven project.
 
@@ -57,11 +57,11 @@ As those are not transitively inherited they need to be declared explicitly in t
             </goals>
             <configuration>
               <rules>
-                <requireTransitiveProvidedDependenciesInRuntimeClasspath implementation="org.apache.sling.maven.enforcer.RequireTransitiveProvidedDependenciesInRuntimeClasspath">
+                <requireProvidedDependenciesInRuntimeClasspath implementation="org.apache.sling.maven.enforcer.RequireProvidedDependenciesInRuntimeClasspath">
                   <excludes>
                     <exclude>javax.servlet:javax.servlet-api</exclude>
                   </excludes>
-                </requireTransitiveProvidedDependenciesInRuntimeClasspath>
+                </requireProvidedDependenciesInRuntimeClasspath>
               </rules>
               <fail>true</fail>
             </configuration>
