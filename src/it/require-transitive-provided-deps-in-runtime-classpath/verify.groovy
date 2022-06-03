@@ -16,7 +16,8 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-File buildLog = new File( basedir, 'build.log' )
-assert buildLog.text.contains( 'Found 15 missing runtime dependencies:' )
-assert buildLog.text.contains( 'Transitive provided dependency org.osgi:org.osgi.framework:jar:1.8.0 (via org.apache.sling.maven.enforcer.it:require-transitive-provided-deps-in-runtime-classpath:pom:0.0.1-SNAPSHOT -> org.apache.jackrabbit.vault:vault-cli:jar:3.6.0 -> org.apache.jackrabbit.vault:org.apache.jackrabbit.vault:jar:3.6.0) not found as runtime dependency!' )
+File buildLog = new File(basedir, 'build.log')
+assert buildLog.text.contains('Found 16 missing runtime dependencies:')
+assert buildLog.text.contains('Provided dependency org.osgi:org.osgi.framework:jar:1.8.0 (via org.apache.jackrabbit.vault:vault-cli:jar:3.6.0 -> org.apache.jackrabbit.vault:org.apache.jackrabbit.vault:jar:3.6.0) not found as runtime dependency!')
+assert buildLog.text.contains('Provided dependency com.google.code.findbugs:jsr305:jar:3.0.2 (direct) not found as runtime dependency!')
 assert true

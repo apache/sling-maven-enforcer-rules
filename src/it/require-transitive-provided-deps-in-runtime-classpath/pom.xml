@@ -65,10 +65,18 @@
     </build>
     
     <dependencies>
+        <!-- multiple transitive provided dependencies (18, but 3 excluded) -->
         <dependency>
             <groupId>org.apache.jackrabbit.vault</groupId>
             <artifactId>vault-cli</artifactId>
             <version>3.6.0</version>
+        </dependency>
+        <!-- direct provided dependency -->
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+            <version>3.0.2</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 </project>

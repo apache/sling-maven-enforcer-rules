@@ -17,90 +17,91 @@
     specific language governing permissions and limitations
     under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-  <parent>
-    <groupId>org.apache.sling</groupId>
-    <artifactId>sling</artifactId>
-    <version>47</version>
-  </parent>
-  <artifactId>maven-enforcer-rules</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
-  <name>Additional Maven Enforcer Rules</name>
-  <description>Custom Maven Enforcer rules specifically targeted at working with OSGi bundle modules</description>
+    <parent>
+        <groupId>org.apache.sling</groupId>
+        <artifactId>sling</artifactId>
+        <version>47</version>
+    </parent>
+    <artifactId>maven-enforcer-rules</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>Additional Maven Enforcer Rules</name>
+    <description>Custom Maven Enforcer rules specifically targeted at working with OSGi bundle modules</description>
 
-  <scm>
-    <connection>scm:git:https://gitbox.apache.org/repos/asf/sling-maven-enforcer-rules.git</connection>
-    <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/sling-maven-enforcer-rules.git</developerConnection>
-    <url>https://gitbox.apache.org/repos/asf?p=sling-maven-enforcer-rules.git</url>
-  </scm>
+    <scm>
+        <connection>scm:git:https://gitbox.apache.org/repos/asf/sling-maven-enforcer-rules.git</connection>
+        <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/sling-maven-enforcer-rules.git</developerConnection>
+        <url>https://gitbox.apache.org/repos/asf?p=sling-maven-enforcer-rules.git</url>
+    </scm>
 
-  <properties>
-    <sling.java.version>8</sling.java.version>
-    <api.version>3.0.0</api.version>
-    <maven.version>3.3.1</maven.version>
-    <project.build.outputTimestamp>10</project.build.outputTimestamp>
-  </properties>
+    <properties>
+        <sling.java.version>8</sling.java.version>
+        <api.version>3.0.0</api.version>
+        <maven.version>3.3.1</maven.version>
+        <project.build.outputTimestamp>10</project.build.outputTimestamp>
+    </properties>
 
-  <dependencies>
-    <dependency>
-      <groupId>org.apache.maven.enforcer</groupId>
-      <artifactId>enforcer-api</artifactId>
-      <version>${api.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.maven.enforcer</groupId>
-      <artifactId>enforcer-rules</artifactId>
-      <version>${api.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.maven</groupId>
-      <artifactId>maven-core</artifactId>
-      <version>${maven.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.maven</groupId>
-      <artifactId>maven-plugin-api</artifactId>
-      <version>${maven.version}</version>
-      <scope>provided</scope>
-    </dependency>
-    <!-- as Maven Enforcer API still uses JSR305 null annotations we cannot yet switch to Jetbrains null annotations -->
-    <dependency>
-      <groupId>com.google.code.findbugs</groupId>
-      <artifactId>jsr305</artifactId>
-      <version>3.0.2</version>
-      <scope>provided</scope>
-    </dependency>
-  </dependencies>
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.maven.enforcer</groupId>
+            <artifactId>enforcer-api</artifactId>
+            <version>${api.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven.enforcer</groupId>
+            <artifactId>enforcer-rules</artifactId>
+            <version>${api.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-core</artifactId>
+            <version>${maven.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-plugin-api</artifactId>
+            <version>${maven.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- as Maven Enforcer API still uses JSR305 null annotations we cannot yet switch to Jetbrains null annotations -->
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+            <version>3.0.2</version>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
 
-  <build>
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-invoker-plugin</artifactId>
-        <version>3.3.0</version>
-        <configuration>
-          <projectsDirectory>src/it</projectsDirectory>
-          <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
-          <pomIncludes>
-            <pomInclude>**/pom.xml</pomInclude>
-          </pomIncludes>
-          <postBuildHookScript>verify.groovy</postBuildHookScript>
-          <streamLogsOnFailures>true</streamLogsOnFailures>
-        </configuration>
-        <executions>
-          <execution>
-            <id>integration-test</id>
-            <goals>
-              <goal>install</goal>
-              <goal>integration-test</goal>
-              <goal>verify</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
-  </build>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-invoker-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <projectsDirectory>src/it</projectsDirectory>
+                    <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
+                    <pomIncludes>
+                        <pomInclude>**/pom.xml</pomInclude>
+                    </pomIncludes>
+                    <postBuildHookScript>verify.groovy</postBuildHookScript>
+                    <streamLogsOnFailures>true</streamLogsOnFailures>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>integration-test</id>
+                        <goals>
+                            <goal>install</goal>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

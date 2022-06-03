@@ -68,11 +68,12 @@ import org.eclipse.aether.util.graph.visitor.TreeDependencyVisitor;
 
 /** Checks that the runtime classpath (e.g. used by Maven Plugins via the
  * <a href="https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders">Plugin Classloader</a>) contains all
- * transitive provided dependencies.
+ * provided dependencies (also the transitive ones).
  * 
  * As those are not transitively inherited they need to be declared explicitly in the pom.xml of the using Maven project.
  * 
- * This check is useful to make sure that a Maven Plugin has access to all necessary classes at run time. */
+ * This check is useful to make sure that a Maven Plugin has access to all necessary classes at run time. 
+ */
 public class RequireTransitiveProvidedDependenciesInRuntimeClasspath
         extends AbstractNonCacheableEnforcerRule implements EnforcerRule2 {
 
@@ -174,7 +175,7 @@ public class RequireTransitiveProvidedDependenciesInRuntimeClasspath
             Artifact dependency = RepositoryUtils.toArtifact(artifactResult.getKey());
             if (ArtifactUtils.checkDependencies(Collections.singleton(dependency), excludes) == null) {
                 if (!isArtifactContainedInList(dependency, runtimeArtifacts)) {
-                    violationMessages.add("Transitive provided dependency " + dependency
+                    violationMessages.add("Provided dependency " + dependency
                             + " (" + dumpPaths(artifactResult.getValue()) + ") not found as runtime dependency!");
                 }
             } else {
@@ -184,14 +185,20 @@ public class RequireTransitiveProvidedDependenciesInRuntimeClasspath
     }
 
     private static String dumpPaths(List<List<DependencyNode>> paths) {
-        return paths.stream()
+        String via = paths.stream()
                 .map(RequireTransitiveProvidedDependenciesInRuntimeClasspath::dumpPath)
-                .collect(Collectors.joining(" and ",  "via ", ""));
+                .collect(Collectors.joining(" and "));
+        if (via.isEmpty()) {
+            return "direct";
+        } else {
+            return "via " + via;
+        }
     }
 
     private static String dumpPath(List<DependencyNode> path) {
         return path.stream()
-                .limit(path.size() - 1l)
+                .skip(1) // first entry is the project itself
+                .limit(path.size() - 2l)  // last entry is the dependency (which is logged separately)
                 .map(n -> n.getArtifact().toString())
                 .collect(Collectors.joining(" -> "));
     }
