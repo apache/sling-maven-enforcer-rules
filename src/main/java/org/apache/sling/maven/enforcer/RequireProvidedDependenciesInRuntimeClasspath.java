@@ -21,12 +21,12 @@ package org.apache.sling.maven.enforcer;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -48,7 +48,9 @@ import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.collection.CollectRequest;
+import org.eclipse.aether.collection.CollectResult;
 import org.eclipse.aether.collection.DependencyCollectionContext;
+import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.collection.DependencySelector;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyFilter;
@@ -56,16 +58,11 @@ import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
 import org.eclipse.aether.graph.Exclusion;
 import org.eclipse.aether.repository.RemoteRepository;
-import org.eclipse.aether.resolution.ArtifactResult;
-import org.eclipse.aether.resolution.DependencyRequest;
-import org.eclipse.aether.resolution.DependencyResolutionException;
-import org.eclipse.aether.resolution.DependencyResult;
 import org.eclipse.aether.util.graph.selector.AndDependencySelector;
 import org.eclipse.aether.util.graph.selector.ExclusionDependencySelector;
 import org.eclipse.aether.util.graph.selector.OptionalDependencySelector;
 import org.eclipse.aether.util.graph.selector.ScopeDependencySelector;
 import org.eclipse.aether.util.graph.selector.StaticDependencySelector;
-import org.eclipse.aether.util.graph.visitor.PathRecordingDependencyVisitor;
 import org.eclipse.aether.util.graph.visitor.TreeDependencyVisitor;
 
 /** Checks that the runtime classpath (e.g. used by Maven Plugins via the
@@ -149,20 +146,13 @@ public class RequireProvidedDependenciesInRuntimeClasspath
 
         Dependency rootDependency = RepositoryUtils.toDependency(project.getArtifact(), null);
         try {
-            Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactMap = collectTransitiveDependencies(
+            DependencyNode rootDependencyNode = collectTransitiveDependencies(
                     rootDependency, repoSystem, newRepoSession, remoteRepositories, log);
-            if (log.isDebugEnabled()) {
-                log.debug("Collected " + artifactMap.size()+ " transitive dependencies: ");
-                for (Entry<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactResult : artifactMap.entrySet()) {
-                    log.debug(artifactResult.getKey().toString()
-                            + " (" + dumpPaths(artifactResult.getValue()) + ")");
-                }
-            }
-            int numViolations = checkForMissingArtifacts(artifactMap, runtimeArtifacts, log);
+            int numViolations = checkForMissingArtifacts(rootDependencyNode, runtimeArtifacts, log);
             if (numViolations > 0) {
                 throw new EnforcerRuleException("Found " + numViolations + " missing runtime dependencies. Look at the errors emitted above for the details.");
             }
-        } catch (DependencyResolutionException e) {
+        } catch (DependencyCollectionException e) {
             // draw graph
             StringWriter writer = new StringWriter();
             DependencyVisitor depVisitor = new TreeDependencyVisitor(
@@ -264,59 +254,79 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         }
     }
 
-    protected Map<Artifact, List<List<DependencyNode>>> collectTransitiveDependencies(
+    private static final class MissingArtifactsDependencyVisitor implements DependencyVisitor {
+        private final List<Artifact> artifacts;
+        private final Log log;
+        private int numMissingArtifacts;
+        private final Deque<DependencyNode> nodeStack; // all intermediate nodes (without the root node)
+        private boolean isRoot;
+
+        MissingArtifactsDependencyVisitor(List<Artifact> artifacts, Log log) {
+            this.artifacts = artifacts;
+            this.log = log;
+            numMissingArtifacts = 0;
+            nodeStack = new ArrayDeque<>();
+            isRoot = true;
+        }
+
+        @Override
+        public boolean visitEnter(DependencyNode dependencyNode) {
+            if (isRoot) {
+                isRoot = false;
+            } else {
+                if (!isArtifactContainedInList(dependencyNode.getArtifact(), artifacts)) {
+                    MessageBuilder msgBuilder = MessageUtils.buffer();
+                    log.error(msgBuilder.a("Provided dependency ").strong(dependencyNode.getArtifact()).mojo(" (" + dumpIntermediatePath(nodeStack) + ")").a(" not found as runtime dependency!").toString());
+                    numMissingArtifacts++;
+                }
+                nodeStack.addLast(dependencyNode);
+            }
+            return true;
+        }
+
+        @Override
+        public boolean visitLeave(DependencyNode dependencyNode) {
+            if (!nodeStack.isEmpty()) {
+                nodeStack.removeLast();
+            }
+            return true;
+        }
+
+        public int getNumMissingArtifacts() {
+            return numMissingArtifacts;
+        }
+    }
+
+    protected DependencyNode collectTransitiveDependencies(
             org.eclipse.aether.graph.Dependency rootDependency,
             RepositorySystem repoSystem, RepositorySystemSession repoSession,
             List<RemoteRepository> remoteRepositories, Log log)
-            throws DependencyResolutionException {
+            throws DependencyCollectionException {
         CollectRequest collectRequest = new CollectRequest(rootDependency, remoteRepositories);
-        DependencyRequest req = new DependencyRequest(collectRequest, null);
-        DependencyResult resolutionResult = repoSystem.resolveDependencies(repoSession, req);
+        CollectResult collectResult = repoSystem.collectDependencies(repoSession, collectRequest);
         if (log.isDebugEnabled()) {
             // draw full dependency graph
             StringWriter writer = new StringWriter();
             DependencyVisitor depVisitor = new TreeDependencyVisitor(
                     new DependencyVisitorPrinter(new PrintWriter(writer)));
-            resolutionResult.getRoot().accept(depVisitor);
+            collectResult.getRoot().accept(depVisitor);
             log.debug("dependency tree: " + writer.toString());
         }
-        // generate a map with key = artifact, value = all paths to it
-        return resolutionResult.getArtifactResults().stream()
-                .filter(a -> !areArtifactsEqualDisregardingVersion(a.getArtifact(), rootDependency.getArtifact())) // remove rootDependency itself
-                .collect(Collectors.toMap(ArtifactResult::getArtifact, a -> getPathsForDependency(resolutionResult.getRoot(), a.getArtifact())));
+        return collectResult.getRoot();
     }
 
-    protected int checkForMissingArtifacts(Map<Artifact, List<List<DependencyNode>>> artifactMap, List<Artifact> runtimeArtifacts,
+    protected int checkForMissingArtifacts(DependencyNode rootDependencyNode, List<Artifact> runtimeArtifacts,
             Log log) {
-        int numViolations = 0;
-        for (Entry<Artifact, List<List<DependencyNode>>> artifactResult : artifactMap.entrySet()) {
-            if (!isArtifactContainedInList(artifactResult.getKey(), runtimeArtifacts)) {
-                    MessageBuilder msgBuilder = MessageUtils.buffer();
-                    log.error(msgBuilder.a("Provided dependency ").strong(artifactResult.getKey()).mojo(" (" + dumpPaths(artifactResult.getValue()) + ")").a(" not found as runtime dependency!").toString());
-                    numViolations++;
-            }
-        }
-        return numViolations;
+        MissingArtifactsDependencyVisitor depVisitor = new MissingArtifactsDependencyVisitor(runtimeArtifacts, log);
+        rootDependencyNode.accept(depVisitor);
+        return depVisitor.getNumMissingArtifacts();
     }
 
-    private static String dumpPaths(List<List<DependencyNode>> paths) {
-        String via = paths.stream()
-                .map(RequireProvidedDependenciesInRuntimeClasspath::dumpPath)
-                .collect(Collectors.joining(" and "));
-        if (via.isEmpty()) {
+    private static String dumpIntermediatePath(Collection<DependencyNode> path) {
+        if (path.isEmpty()) {
             return "direct";
-        } else {
-            return "via " + via;
         }
-    }
-
-    private static String dumpPath(List<DependencyNode> path) {
-        if (path.size() <= 2) {
-            return "";
-        }
-        return path.stream()
-                .skip(1) // first entry is the project itself
-                .limit(path.size() - 2l)  // last entry is the dependency (which is logged separately)
+        return "via " + path.stream()
                 .map(n -> n.getArtifact().toString())
                 .collect(Collectors.joining(" -> "));
     }
@@ -342,12 +352,6 @@ public class RequireProvidedDependenciesInRuntimeClasspath
                 && artifact1.getGroupId().equals(artifact2.getGroupId())
                 && Objects.toString(artifact2.getClassifier(), "").equals(Objects.toString(artifact1.getClassifier(), ""))
                 && artifact1.getExtension().equals(artifact2.getExtension()));
-    }
-
-    private static List<List<DependencyNode>> getPathsForDependency(DependencyNode root, Artifact artifact) {
-        PathRecordingDependencyVisitor visitor = new PathRecordingDependencyVisitor(new SingleArtifactFilter(artifact));
-        root.accept(visitor);
-        return visitor.getPaths();
     }
 
     private static final class SingleArtifactFilter implements DependencyFilter {
