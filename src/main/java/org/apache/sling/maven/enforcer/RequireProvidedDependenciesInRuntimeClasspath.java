@@ -160,7 +160,6 @@ public class RequireProvidedDependenciesInRuntimeClasspath
                             + " (" + dumpPaths(artifactResult.getValue()) + ")");
                 }
             }
-            // collect all violations
             int numViolations = checkForMissingArtifacts(artifactMap, runtimeArtifacts, log);
             if (numViolations > 0) {
                 throw new EnforcerRuleException("Found " + numViolations + " missing runtime dependencies. Look at the errors emitted above for the details.");
@@ -175,7 +174,6 @@ public class RequireProvidedDependenciesInRuntimeClasspath
                     + e.getMessage() + ". Partial dependency tree: " + writer.toString(), e);
         }
     }
-
 
     /**
      * 
@@ -240,7 +238,6 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         }
     }
 
-    
     private static final class DependencyVisitorPrinter implements DependencyVisitor {
         private final PrintWriter printWriter;
         private String indent = "";
@@ -272,7 +269,6 @@ public class RequireProvidedDependenciesInRuntimeClasspath
     protected int checkForMissingArtifacts(Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactMap, List<Artifact> runtimeArtifacts,
             Log log) throws EnforcerRuleException {
         int numViolations = 0;
-        
         for (Entry<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactResult : artifactMap.entrySet()) {
             Artifact dependency = RepositoryUtils.toArtifact(artifactResult.getKey());
             if (ArtifactUtils.checkDependencies(Collections.singleton(dependency), excludes) == null) {
