@@ -22,7 +22,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.apache.sling.maven.enforcer.it</groupId>
-    <artifactId>require-transitive-provided-deps-in-runtime-classpath</artifactId>
+    <artifactId>require-provided-deps-in-runtime-classpath</artifactId>
     <packaging>pom</packaging>
     <version>@project.version@</version>
 
@@ -52,8 +52,10 @@
                                     <excludes>
                                         <exclude>*:h2</exclude>
                                         <exclude>org.codehaus.woodstox</exclude>
-                                        <exclude>javax.servlet:javax.servlet-api:3.1.0</exclude>
+                                        <exclude>javax.servlet:javax.servlet-api</exclude>
+                                        <exclude>*:org.apache.felix.scr.annotations</exclude>
                                     </excludes>
+                                    <includeDirectDependencies>true</includeDirectDependencies>
                                 </requireProvidedDependenciesInRuntimeClasspath>
                             </rules>
                             <fail>true</fail>
@@ -71,12 +73,27 @@
             <artifactId>vault-cli</artifactId>
             <version>3.6.0</version>
         </dependency>
-        <!-- direct provided dependency -->
+        <!-- direct provided dependency excluded by default -->
         <dependency>
             <groupId>com.google.code.findbugs</groupId>
             <artifactId>jsr305</artifactId>
             <version>3.0.2</version>
             <scope>provided</scope>
         </dependency>
+        <!-- provided but excluded dependency with further transitive dependencies -->
+        <dependency>
+            <groupId>org.apache.felix</groupId>
+            <artifactId>org.apache.felix.scr.annotations</artifactId>
+            <version>1.9.8</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- test scope is excluded by default -->
+        <dependency>
+            <groupId>org.hamcrest</groupId>
+            <artifactId>hamcrest</artifactId>
+            <version>2.2</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 </project>

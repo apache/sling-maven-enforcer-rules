@@ -21,6 +21,7 @@ package org.apache.sling.maven.enforcer;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
@@ -41,12 +42,17 @@ import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.enforcer.AbstractNonCacheableEnforcerRule;
 import org.apache.maven.plugins.enforcer.utils.ArtifactUtils;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.shared.utils.logging.MessageBuilder;
+import org.apache.maven.shared.utils.logging.MessageUtils;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
 import org.codehaus.plexus.component.repository.exception.ComponentLookupException;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
 import org.eclipse.aether.collection.CollectRequest;
+import org.eclipse.aether.collection.DependencyCollectionContext;
+import org.eclipse.aether.collection.DependencySelector;
+import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyFilter;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
@@ -56,13 +62,11 @@ import org.eclipse.aether.resolution.ArtifactResult;
 import org.eclipse.aether.resolution.DependencyRequest;
 import org.eclipse.aether.resolution.DependencyResolutionException;
 import org.eclipse.aether.resolution.DependencyResult;
-import org.eclipse.aether.util.filter.OrDependencyFilter;
-import org.eclipse.aether.util.filter.PatternInclusionsDependencyFilter;
-import org.eclipse.aether.util.filter.ScopeDependencyFilter;
 import org.eclipse.aether.util.graph.selector.AndDependencySelector;
 import org.eclipse.aether.util.graph.selector.ExclusionDependencySelector;
 import org.eclipse.aether.util.graph.selector.OptionalDependencySelector;
 import org.eclipse.aether.util.graph.selector.ScopeDependencySelector;
+import org.eclipse.aether.util.graph.selector.StaticDependencySelector;
 import org.eclipse.aether.util.graph.visitor.PathRecordingDependencyVisitor;
 import org.eclipse.aether.util.graph.visitor.TreeDependencyVisitor;
 
@@ -77,13 +81,28 @@ import org.eclipse.aether.util.graph.visitor.TreeDependencyVisitor;
 public class RequireProvidedDependenciesInRuntimeClasspath
         extends AbstractNonCacheableEnforcerRule implements EnforcerRule2 {
 
-    /** Specify the banned dependencies. This can be a list of artifacts in the format <code>groupId[:artifactId][:version]</code>. Any of
-     * the sections can be a wildcard by using '*' (ie group:*:1.0) <br>
-     * The rule will fail if any dependency matches any exclude, unless it also matches an include rule.
+    /** 
+     * Specify the banned dependencies. This is a list of artifacts in format {@code <groupId>[:<artifactId>[:<extension>[:<classifier>]]]}. 
+     * Excluded dependencies are not traversed, i.e. their transitive dependencies are not considered.
      * 
      * @see {@link #setExcludes(List)} */
     private List<String> excludes = null;
 
+    /**
+     * Whether to include optional dependencies in the check. Default = false.
+     * 
+     * @see {@link #setIncludeOptionalDependencies(boolean)}
+     */
+    private boolean includeOptionals;
+
+    /**
+     * Whether to include direct (i.e. non transitive) provided dependencies in the check. Default = false.
+     * 
+     * @see {@link #setIncludeDirectDependencies(boolean)}
+     */
+    private boolean includeDirects;
+
+    @SuppressWarnings("unchecked")
     @Override
     public void execute(@Nonnull EnforcerRuleHelper helper) throws EnforcerRuleException {
         MavenProject project;
@@ -103,31 +122,48 @@ public class RequireProvidedDependenciesInRuntimeClasspath
             throw new EnforcerRuleException("Unable to retrieve component RepositorySystem", cle);
         }
         Log log = helper.getLog();
-        // make sure to transitively also collect dependencies of provided scope
-        newRepoSession.setDependencySelector(new AndDependencySelector(
-                new OptionalDependencySelector(),
-                new ScopeDependencySelector("test"),
-                new ExclusionDependencySelector(Collections.singleton(new Exclusion("*", "*", "*", "pom")))));
-        // use the ones for https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders
-        List<Artifact> runtimeArtifacts = project.getRuntimeArtifacts();
+        
+        Collection<DependencySelector> depSelectors = new ArrayList<>();
+        depSelectors.add(new ScopeDependencySelector("test")); // exclude transitive and direct "test" dependencies of the rootDependency (i.e. the current project)
+        // add also the exclude patterns
+        if (excludes != null && !excludes.isEmpty()) {
+            Collection<Exclusion> exclusions = excludes.stream().map(RequireProvidedDependenciesInRuntimeClasspath::convertPatternToExclusion).collect(Collectors.toCollection(LinkedList::new));
+            exclusions.add(new Exclusion("*", "*", "*", "pom"));
+            depSelectors.add(new ExclusionDependencySelector(exclusions));
+        }
+        if (!includeOptionals) {
+            depSelectors.add(new OptionalDependencySelector());
+        }
+        if (!includeDirects) {
+            depSelectors.add(new LevelAndScopeExclusionSelector(1, "provided"));
+        }
+        newRepoSession.setDependencySelector(new AndDependencySelector(depSelectors));
 
+        // use the ones for https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders
+        @SuppressWarnings("deprecation")
+        List<Artifact> runtimeArtifacts = project.getRuntimeArtifacts();
+        if (log.isDebugEnabled()) {
+            log.debug("Collected " + runtimeArtifacts.size()+ " runtime dependencies ");
+            for (Artifact runtimeArtifact : runtimeArtifacts) {
+                log.debug(runtimeArtifact.toString());
+            }
+        }
+
+        Dependency rootDependency = RepositoryUtils.toDependency(project.getArtifact(), null);
         try {
             Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactMap = collectTransitiveDependencies(
-                    RepositoryUtils.toDependency(project.getArtifact(), null),
-                    repoSystem, newRepoSession, remoteRepositories);
+                    rootDependency, repoSystem, newRepoSession, remoteRepositories, log);
             if (log.isDebugEnabled()) {
                 log.debug("Collected " + artifactMap.size()+ " transitive dependencies: ");
                 for (Entry<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactResult : artifactMap.entrySet()) {
                     log.debug(artifactResult.getKey().toString()
                             + " (" + dumpPaths(artifactResult.getValue()) + ")");
                 }
-                
             }
             // collect all violations
-            Collection<String> violationMessages = new LinkedList<>();
-            checkForMissingArtifacts(artifactMap, runtimeArtifacts, violationMessages, log);
-            if (!violationMessages.isEmpty()) {
-                throw new EnforcerRuleException("Found " + violationMessages.size() + " missing runtime dependencies:" + System.lineSeparator() + String.join(System.lineSeparator(), violationMessages));
+            int numViolations = checkForMissingArtifacts(artifactMap, runtimeArtifacts, log);
+            if (numViolations > 0) {
+                throw new EnforcerRuleException("Found " + numViolations + " missing runtime dependencies. Look at the errors emitted above for the details.");
             }
         } catch (DependencyResolutionException e) {
             // draw graph
@@ -138,10 +174,74 @@ public class RequireProvidedDependenciesInRuntimeClasspath
             throw new EnforcerRuleException("Could not retrieve dependency metadata for project  : "
                     + e.getMessage() + ". Partial dependency tree: " + writer.toString(), e);
         }
-
     }
 
-    private final class DependencyVisitorPrinter implements DependencyVisitor {
+
+    /**
+     * 
+     * @param pattern string in in the format {@code <groupId>[:<artifactId>[:<extension>[:<classifier>]]]}
+     * @return the exclusion
+     */
+    private static Exclusion convertPatternToExclusion(String pattern) {
+        String[] parts = pattern.split(":");
+        if (parts.length > 4) {
+            throw new IllegalArgumentException("Pattern must contain at most three colons, but contains " + parts + ": " + pattern);
+        }
+        String groupId = parts[0];
+        String artifactId = "*";
+        String extension = "*";
+        String classifier = "*";
+        if (parts.length > 1) {
+            artifactId = parts[1];
+        }
+        if (parts.length > 2) {
+            extension = parts[2];
+        }
+        if (parts.length > 3) {
+            classifier = parts[3];
+        }
+        return new Exclusion(groupId, artifactId, classifier, extension);
+    }
+
+    private static final class LevelAndScopeExclusionSelector implements DependencySelector {
+
+        private final int targetLevel;
+        private final String targetScope;
+        private final int currentLevel;
+
+        private static final DependencySelector ALL_SELECTOR = new StaticDependencySelector(true);
+
+        public LevelAndScopeExclusionSelector(int targetLevel, String targetScope) {
+            this(targetLevel, targetScope, 0);
+        }
+
+        private LevelAndScopeExclusionSelector(int targetLevel, String targetScope, int currentLevel) {
+            this.targetLevel = targetLevel;
+            this.targetScope = Objects.requireNonNull(targetScope);
+            this.currentLevel = currentLevel;
+        }
+
+        @Override
+        public boolean selectDependency(Dependency dependency) {
+            if (currentLevel == targetLevel) {
+                return !targetScope.equals(dependency.getScope());
+            }
+            return true;
+        }
+
+        @Override
+        public DependencySelector deriveChildSelector(DependencyCollectionContext context) {
+            if (currentLevel < targetLevel) {
+                return new LevelAndScopeExclusionSelector(targetLevel, targetScope, currentLevel+1);
+            } else {
+                // org.eclipse.aether:aether-util:jar:0.9.0.M2 used at runtime doesn't yet support null for no restrictions
+                return ALL_SELECTOR;
+            }
+        }
+    }
+
+    
+    private static final class DependencyVisitorPrinter implements DependencyVisitor {
         private final PrintWriter printWriter;
         private String indent = "";
 
@@ -169,19 +269,23 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         }
     }
 
-    protected void checkForMissingArtifacts(Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactMap, List<Artifact> runtimeArtifacts,
-            Collection<String> violationMessages, Log log) throws EnforcerRuleException {
+    protected int checkForMissingArtifacts(Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactMap, List<Artifact> runtimeArtifacts,
+            Log log) throws EnforcerRuleException {
+        int numViolations = 0;
+        
         for (Entry<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactResult : artifactMap.entrySet()) {
             Artifact dependency = RepositoryUtils.toArtifact(artifactResult.getKey());
             if (ArtifactUtils.checkDependencies(Collections.singleton(dependency), excludes) == null) {
                 if (!isArtifactContainedInList(dependency, runtimeArtifacts)) {
-                    violationMessages.add("Provided dependency " + dependency
-                            + " (" + dumpPaths(artifactResult.getValue()) + ") not found as runtime dependency!");
+                    MessageBuilder msgBuilder = MessageUtils.buffer();
+                    log.error(msgBuilder.a("Provided dependency ").strong(dependency).mojo(" (" + dumpPaths(artifactResult.getValue()) + ")").a(" not found as runtime dependency!").toString());
+                    numViolations++;
                 }
             } else {
                 log.debug("Skip excluded dependency " + dependency);
             }
         }
+        return numViolations;
     }
 
     private static String dumpPaths(List<List<DependencyNode>> paths) {
@@ -196,6 +300,9 @@ public class RequireProvidedDependenciesInRuntimeClasspath
     }
 
     private static String dumpPath(List<DependencyNode> path) {
+        if (path.size() <= 2) {
+            return "";
+        }
         return path.stream()
                 .skip(1) // first entry is the project itself
                 .limit(path.size() - 2l)  // last entry is the dependency (which is logged separately)
@@ -217,22 +324,22 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         return false;
     }
 
-    protected static Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> collectTransitiveDependencies(
+    protected Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> collectTransitiveDependencies(
             org.eclipse.aether.graph.Dependency rootDependency,
             RepositorySystem repoSystem, RepositorySystemSession repoSession,
-            List<RemoteRepository> remoteRepositories)
+            List<RemoteRepository> remoteRepositories, Log log)
             throws DependencyResolutionException {
         CollectRequest collectRequest = new CollectRequest(rootDependency, remoteRepositories);
-        // project itself (independent of scope) + transitive provided ones
-        DependencyFilter depFilter = new OrDependencyFilter(
-                new PatternInclusionsDependencyFilter(
-                        rootDependency.getArtifact().getGroupId() + ":"
-                                + rootDependency.getArtifact().getArtifactId()),
-                new ScopeDependencyFilter(Collections.singleton("provided"),
-                        Collections.<String> emptySet()));
-        // filtering applied only for DependencyResult.getArtifactResults() but not for DependencyResult.getRoot()!
-        DependencyRequest req = new DependencyRequest(collectRequest, depFilter);
+        DependencyRequest req = new DependencyRequest(collectRequest, null);
         DependencyResult resolutionResult = repoSystem.resolveDependencies(repoSession, req);
+        if (log.isDebugEnabled()) {
+            // draw full dependency graph
+            StringWriter writer = new StringWriter();
+            DependencyVisitor depVisitor = new TreeDependencyVisitor(
+                    new DependencyVisitorPrinter(new PrintWriter(writer)));
+            resolutionResult.getRoot().accept(depVisitor);
+            log.debug("dependency tree: " + writer.toString());
+        }
         // generate a map with key = artifact, value = all paths to it
         return resolutionResult.getArtifactResults().stream()
                 .filter(a -> !a.getArtifact().toString().equals(rootDependency.getArtifact().toString())) // remove rootDependency itself
@@ -245,7 +352,7 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         return visitor.getPaths();
     }
 
-    static final class SingleArtifactFilter implements DependencyFilter {
+    private static final class SingleArtifactFilter implements DependencyFilter {
         private final org.eclipse.aether.artifact.Artifact artifact;
 
         public SingleArtifactFilter(org.eclipse.aether.artifact.Artifact artifact) {
@@ -257,13 +364,15 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         }
     }
 
-    /** Specify the banned dependencies. This can be a list of artifacts in the format <code>groupId[:artifactId][:version]</code>. Any of
-     * the sections can be a wildcard by using '*' (ie group:*:1.0) <br>
-     * The rule will fail if any dependency matches any exclude, unless it also matches an include rule.
-     * 
-     * @param theExcludes the excludes to set */
     public void setExcludes(List<String> theExcludes) {
         this.excludes = theExcludes;
     }
 
+    public void setIncludeOptionalDependencies(boolean includeOptionals) {
+        this.includeOptionals = includeOptionals;
+    }
+
+    public void setIncludeDirectDependencies(boolean includeDirects) {
+        this.includeDirects = includeDirects;
+    }
 }

@@ -25,11 +25,14 @@ As those are not transitively inherited they need to be declared explicitly in t
 
 #### Parameters
 
- * `excludes` - a list of dependencies to skip. Their transitive dependencies are not evaluated either. The format is `groupId[:artifactId][:version][:type][:scope][:classifier]` where `artifactId`, `version`, `type`, `scope` and `classifier` are optional. Wild cards (`*` for arbitrarily many characters or `?` for an arbitrary single character) may be used to replace an entire or just parts of a section. *Examples*: 
+All parameters are optional.
+
+ * `excludes` - a list of dependencies to skip. Their transitive dependencies are not evaluated either. The format is `<groupId>[:<artifactId>[:<extension>[:<classifier>]]]`. Wild cards (`*`) may be used to replace an entire part of a section. *Examples*: 
      * `org.apache.maven` (everything with the given group)
      * `org.apache.maven:myArtifact`
-     * `org.apache.maven:*:1.2` (exclude version 1.2 and above, equivalent to [1.2,) )
-     * `org.apache.maven:*:[1.2]` (explicit exclude of version 1.2)
+     * `org.apache.maven:*:jar`
+ * `includeOptionalDependencies` - whether to include optional dependencies in the check. Either `true` or `false`. By default no optional dependencies are checked.
+ * `includeDirectDependencies` - whether to include direct (provided) dependencies in the check. Either `true` or `false`. By default no direct provided dependencies are checked.
 
 #### Sample Plugin Configuration:
 

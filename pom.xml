@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.apache.sling</groupId>
         <artifactId>sling</artifactId>
-        <version>47</version>
+        <version>48</version>
     </parent>
     <artifactId>maven-enforcer-rules</artifactId>
     <version>0.0.1-SNAPSHOT</version>
@@ -40,7 +40,7 @@
     <properties>
         <sling.java.version>8</sling.java.version>
         <api.version>3.0.0</api.version>
-        <maven.version>3.3.1</maven.version>
+        <maven.version>3.1.1</maven.version><!-- must be the same version as used by enforcer-api due to shared classloader -->
         <project.build.outputTimestamp>10</project.build.outputTimestamp>
     </properties>
 
@@ -54,6 +54,12 @@
             <groupId>org.apache.maven.enforcer</groupId>
             <artifactId>enforcer-rules</artifactId>
             <version>${api.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
@@ -66,6 +72,11 @@
             <artifactId>maven-plugin-api</artifactId>
             <version>${maven.version}</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+              <groupId>org.apache.maven.shared</groupId>
+              <artifactId>maven-shared-utils</artifactId>
+              <version>3.3.4</version>
         </dependency>
         <!-- as Maven Enforcer API still uses JSR305 null annotations we cannot yet switch to Jetbrains null annotations -->
         <dependency>
@@ -90,6 +101,7 @@
                     </pomIncludes>
                     <postBuildHookScript>verify.groovy</postBuildHookScript>
                     <streamLogsOnFailures>true</streamLogsOnFailures>
+                    <debug>true</debug>
                 </configuration>
                 <executions>
                     <execution>
