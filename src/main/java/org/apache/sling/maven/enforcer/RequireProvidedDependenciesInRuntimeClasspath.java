@@ -23,7 +23,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -34,13 +33,11 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import org.apache.maven.RepositoryUtils;
-import org.apache.maven.artifact.Artifact;
 import org.apache.maven.enforcer.rule.api.EnforcerRule2;
 import org.apache.maven.enforcer.rule.api.EnforcerRuleException;
 import org.apache.maven.enforcer.rule.api.EnforcerRuleHelper;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.plugins.enforcer.AbstractNonCacheableEnforcerRule;
-import org.apache.maven.plugins.enforcer.utils.ArtifactUtils;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.utils.logging.MessageBuilder;
 import org.apache.maven.shared.utils.logging.MessageUtils;
@@ -49,6 +46,7 @@ import org.codehaus.plexus.component.repository.exception.ComponentLookupExcepti
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
+import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.collection.DependencyCollectionContext;
 import org.eclipse.aether.collection.DependencySelector;
@@ -93,14 +91,14 @@ public class RequireProvidedDependenciesInRuntimeClasspath
      * 
      * @see {@link #setIncludeOptionalDependencies(boolean)}
      */
-    private boolean includeOptionals;
+    private boolean includeOptionals = false;
 
     /**
      * Whether to include direct (i.e. non transitive) provided dependencies in the check. Default = false.
      * 
      * @see {@link #setIncludeDirectDependencies(boolean)}
      */
-    private boolean includeDirects;
+    private boolean includeDirects = false;
 
     @SuppressWarnings("unchecked")
     @Override
@@ -141,7 +139,7 @@ public class RequireProvidedDependenciesInRuntimeClasspath
 
         // use the ones for https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders
         @SuppressWarnings("deprecation")
-        List<Artifact> runtimeArtifacts = project.getRuntimeArtifacts();
+        List<org.eclipse.aether.artifact.Artifact> runtimeArtifacts = project.getRuntimeArtifacts().stream().map(RepositoryUtils::toArtifact).collect(Collectors.toList());
         if (log.isDebugEnabled()) {
             log.debug("Collected " + runtimeArtifacts.size()+ " runtime dependencies ");
             for (Artifact runtimeArtifact : runtimeArtifacts) {
@@ -266,19 +264,36 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         }
     }
 
-    protected int checkForMissingArtifacts(Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactMap, List<Artifact> runtimeArtifacts,
-            Log log) throws EnforcerRuleException {
+    protected Map<Artifact, List<List<DependencyNode>>> collectTransitiveDependencies(
+            org.eclipse.aether.graph.Dependency rootDependency,
+            RepositorySystem repoSystem, RepositorySystemSession repoSession,
+            List<RemoteRepository> remoteRepositories, Log log)
+            throws DependencyResolutionException {
+        CollectRequest collectRequest = new CollectRequest(rootDependency, remoteRepositories);
+        DependencyRequest req = new DependencyRequest(collectRequest, null);
+        DependencyResult resolutionResult = repoSystem.resolveDependencies(repoSession, req);
+        if (log.isDebugEnabled()) {
+            // draw full dependency graph
+            StringWriter writer = new StringWriter();
+            DependencyVisitor depVisitor = new TreeDependencyVisitor(
+                    new DependencyVisitorPrinter(new PrintWriter(writer)));
+            resolutionResult.getRoot().accept(depVisitor);
+            log.debug("dependency tree: " + writer.toString());
+        }
+        // generate a map with key = artifact, value = all paths to it
+        return resolutionResult.getArtifactResults().stream()
+                .filter(a -> !areArtifactsEqualDisregardingVersion(a.getArtifact(), rootDependency.getArtifact())) // remove rootDependency itself
+                .collect(Collectors.toMap(ArtifactResult::getArtifact, a -> getPathsForDependency(resolutionResult.getRoot(), a.getArtifact())));
+    }
+
+    protected int checkForMissingArtifacts(Map<Artifact, List<List<DependencyNode>>> artifactMap, List<Artifact> runtimeArtifacts,
+            Log log) {
         int numViolations = 0;
-        for (Entry<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> artifactResult : artifactMap.entrySet()) {
-            Artifact dependency = RepositoryUtils.toArtifact(artifactResult.getKey());
-            if (ArtifactUtils.checkDependencies(Collections.singleton(dependency), excludes) == null) {
-                if (!isArtifactContainedInList(dependency, runtimeArtifacts)) {
+        for (Entry<Artifact, List<List<DependencyNode>>> artifactResult : artifactMap.entrySet()) {
+            if (!isArtifactContainedInList(artifactResult.getKey(), runtimeArtifacts)) {
                     MessageBuilder msgBuilder = MessageUtils.buffer();
-                    log.error(msgBuilder.a("Provided dependency ").strong(dependency).mojo(" (" + dumpPaths(artifactResult.getValue()) + ")").a(" not found as runtime dependency!").toString());
+                    log.error(msgBuilder.a("Provided dependency ").strong(artifactResult.getKey()).mojo(" (" + dumpPaths(artifactResult.getValue()) + ")").a(" not found as runtime dependency!").toString());
                     numViolations++;
-                }
-            } else {
-                log.debug("Skip excluded dependency " + dependency);
             }
         }
         return numViolations;
@@ -309,40 +324,27 @@ public class RequireProvidedDependenciesInRuntimeClasspath
     protected static boolean isArtifactContainedInList(Artifact artifact,
             List<Artifact> artifacts) {
         for (Artifact artifactInList : artifacts) {
-            if (artifact.getArtifactId().equals(artifactInList.getArtifactId())
-                    && artifact.getGroupId().equals(artifactInList.getGroupId())
-                    && Objects.toString(artifactInList.getClassifier(), "")
-                            .equals(Objects.toString(artifact.getClassifier(), ""))
-                    && artifact.getType().equals(artifactInList.getType())) {
+            if (areArtifactsEqualDisregardingVersion(artifact, artifactInList)) {
                 return true;
             }
         }
         return false;
     }
 
-    protected Map<org.eclipse.aether.artifact.Artifact, List<List<DependencyNode>>> collectTransitiveDependencies(
-            org.eclipse.aether.graph.Dependency rootDependency,
-            RepositorySystem repoSystem, RepositorySystemSession repoSession,
-            List<RemoteRepository> remoteRepositories, Log log)
-            throws DependencyResolutionException {
-        CollectRequest collectRequest = new CollectRequest(rootDependency, remoteRepositories);
-        DependencyRequest req = new DependencyRequest(collectRequest, null);
-        DependencyResult resolutionResult = repoSystem.resolveDependencies(repoSession, req);
-        if (log.isDebugEnabled()) {
-            // draw full dependency graph
-            StringWriter writer = new StringWriter();
-            DependencyVisitor depVisitor = new TreeDependencyVisitor(
-                    new DependencyVisitorPrinter(new PrintWriter(writer)));
-            resolutionResult.getRoot().accept(depVisitor);
-            log.debug("dependency tree: " + writer.toString());
-        }
-        // generate a map with key = artifact, value = all paths to it
-        return resolutionResult.getArtifactResults().stream()
-                .filter(a -> !a.getArtifact().toString().equals(rootDependency.getArtifact().toString())) // remove rootDependency itself
-                .collect(Collectors.toMap(ArtifactResult::getArtifact, a -> getPathsForDependency(resolutionResult.getRoot(), a.getArtifact())));
+    /**
+     * 
+     * @param artifact1 one artifact
+     * @param artifact2 the other artifact
+     * @return {@code true} in case both artifact's groupId, artifactId, classifier and extension are equals, otherwise {@code false}
+     */
+    protected static boolean areArtifactsEqualDisregardingVersion(Artifact artifact1, Artifact artifact2) {
+        return (artifact1.getArtifactId().equals(artifact2.getArtifactId())
+                && artifact1.getGroupId().equals(artifact2.getGroupId())
+                && Objects.toString(artifact2.getClassifier(), "").equals(Objects.toString(artifact1.getClassifier(), ""))
+                && artifact1.getExtension().equals(artifact2.getExtension()));
     }
 
-    private static List<List<DependencyNode>> getPathsForDependency(DependencyNode root, org.eclipse.aether.artifact.Artifact artifact) {
+    private static List<List<DependencyNode>> getPathsForDependency(DependencyNode root, Artifact artifact) {
         PathRecordingDependencyVisitor visitor = new PathRecordingDependencyVisitor(new SingleArtifactFilter(artifact));
         root.accept(visitor);
         return visitor.getPaths();
