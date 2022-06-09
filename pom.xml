@@ -28,7 +28,7 @@
     </parent>
     <artifactId>maven-enforcer-rules</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>Additional Maven Enforcer Rules</name>
+    <name>Maven Enforcer Rules</name>
     <description>Custom Maven Enforcer rules specifically targeted at working with OSGi bundle modules</description>
 
     <scm>
