@@ -19,9 +19,11 @@ It provides additional [Maven Enforcer](https://maven.apache.org/enforcer/maven-
 ### Require Provided Dependencies in Runtime Classpath
 
 Checks that the runtime classpath (e.g. used by Maven Plugins via the 
-[Plugin Classloader](https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders) or by the [Appassembler Maven Plugin's `assemble` goal](http://www.mojohaus.org/appassembler/appassembler-maven-plugin/assemble-mojo.html)) contains all [provided dependencies](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html#Dependency_Scope) both direct and transitive ones.
+[Plugin Classloader](https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders) or by the [Appassembler Maven Plugin's `assemble` goal](http://www.mojohaus.org/appassembler/appassembler-maven-plugin/assemble-mojo.html)) contains all [provided dependencies](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html#Dependency_Scope).
 
 As those are not transitively inherited they need to be declared explicitly in the pom.xml of the using Maven project.
+
+The check assumes semantic versioning, i.e. for provided dependencies without a version range all compatible runtime dependencies are accepted (i.e. ones that share groupId, artifactId, classifier and extension, and have the same major version and minor version which is equal or higher to the one of the provided dependency.
 
 #### Parameters
 
@@ -32,7 +34,7 @@ All parameters are optional.
      * `org.apache.maven:myArtifact`
      * `org.apache.maven:*:jar`
  * `includeOptionalDependencies` - whether to include optional dependencies in the check. Either `true` or `false`. By default no optional dependencies are checked.
- * `includeDirectDependencies` - whether to include direct (provided) dependencies in the check. Either `true` or `false`. By default no direct provided dependencies are checked.
+ * `includeDirectDependencies` - whether to include direct (provided) dependencies in the check. Either `true` or `false`. By default no direct provided dependencies are checked, i.e. only transitive ones are considered.
 
 #### Sample Plugin Configuration:
 

@@ -33,6 +33,10 @@ import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
 
 import org.apache.maven.RepositoryUtils;
+import org.apache.maven.artifact.versioning.ArtifactVersion;
+import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
+import org.apache.maven.artifact.versioning.InvalidVersionSpecificationException;
+import org.apache.maven.artifact.versioning.VersionRange;
 import org.apache.maven.enforcer.rule.api.EnforcerRule2;
 import org.apache.maven.enforcer.rule.api.EnforcerRuleException;
 import org.apache.maven.enforcer.rule.api.EnforcerRuleHelper;
@@ -53,7 +57,6 @@ import org.eclipse.aether.collection.DependencyCollectionContext;
 import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.collection.DependencySelector;
 import org.eclipse.aether.graph.Dependency;
-import org.eclipse.aether.graph.DependencyFilter;
 import org.eclipse.aether.graph.DependencyNode;
 import org.eclipse.aether.graph.DependencyVisitor;
 import org.eclipse.aether.graph.Exclusion;
@@ -150,7 +153,7 @@ public class RequireProvidedDependenciesInRuntimeClasspath
                     rootDependency, repoSystem, newRepoSession, remoteRepositories, log);
             int numViolations = checkForMissingArtifacts(rootDependencyNode, runtimeArtifacts, log);
             if (numViolations > 0) {
-                throw new EnforcerRuleException("Found " + numViolations + " missing runtime dependencies. Look at the errors emitted above for the details.");
+                throw new EnforcerRuleException("Found " + numViolations + " missing runtime dependencies. Look at the warnings emitted above for the details.");
             }
         } catch (DependencyCollectionException e) {
             // draw graph
@@ -274,10 +277,14 @@ public class RequireProvidedDependenciesInRuntimeClasspath
             if (isRoot) {
                 isRoot = false;
             } else {
-                if (!isArtifactContainedInList(dependencyNode.getArtifact(), artifacts)) {
-                    MessageBuilder msgBuilder = MessageUtils.buffer();
-                    log.error(msgBuilder.a("Provided dependency ").strong(dependencyNode.getArtifact()).mojo(" (" + dumpIntermediatePath(nodeStack) + ")").a(" not found as runtime dependency!").toString());
-                    numMissingArtifacts++;
+                try {
+                    if (!isCompatibleArtifactContainedInList(dependencyNode.getArtifact(), artifacts, log)) {
+                        MessageBuilder msgBuilder = MessageUtils.buffer();
+                        log.warn(msgBuilder.a("Dependency ").strong(dependencyNode.getDependency()).mojo(dumpIntermediatePath(nodeStack)).a(" not found as runtime dependency!").toString());
+                        numMissingArtifacts++;
+                    }
+                } catch (InvalidVersionSpecificationException e) {
+                    log.error("Invalid version given for artifact " + dependencyNode.getArtifact(), e);
                 }
                 nodeStack.addLast(dependencyNode);
             }
@@ -294,6 +301,15 @@ public class RequireProvidedDependenciesInRuntimeClasspath
 
         public int getNumMissingArtifacts() {
             return numMissingArtifacts;
+        }
+
+        private static String dumpIntermediatePath(Collection<DependencyNode> path) {
+            if (path.isEmpty()) {
+                return "";
+            }
+            return " via " + path.stream()
+                    .map(n -> n.getArtifact().toString())
+                    .collect(Collectors.joining(" -> "));
         }
     }
 
@@ -322,23 +338,33 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         return depVisitor.getNumMissingArtifacts();
     }
 
-    private static String dumpIntermediatePath(Collection<DependencyNode> path) {
-        if (path.isEmpty()) {
-            return "direct";
-        }
-        return "via " + path.stream()
-                .map(n -> n.getArtifact().toString())
-                .collect(Collectors.joining(" -> "));
-    }
-
-    protected static boolean isArtifactContainedInList(Artifact artifact,
-            List<Artifact> artifacts) {
+    protected static boolean isCompatibleArtifactContainedInList(Artifact artifact,
+            List<Artifact> artifacts, Log log) throws InvalidVersionSpecificationException {
         for (Artifact artifactInList : artifacts) {
             if (areArtifactsEqualDisregardingVersion(artifact, artifactInList)) {
-                return true;
+                // check version compatibility
+                if (isVersionCompatible(artifact.getVersion(), artifactInList.getVersion())) {
+                    return true;
+                } else {
+                    MessageBuilder msgBuilder = MessageUtils.buffer();
+                    log.warn("Found provided dependency " + msgBuilder.strong(artifact).a(" only with potentially incompatible version ").strong(artifactInList.getVersion()).toString() + " in runtime classpath");
+                }
             }
         }
         return false;
+    }
+
+    protected static boolean isVersionCompatible(String requiredVersion, String providedVersion) throws InvalidVersionSpecificationException {
+       ArtifactVersion provided = new DefaultArtifactVersion(providedVersion);
+       VersionRange required = VersionRange.createFromVersionSpec(requiredVersion);
+       
+       // is it really a range?
+       if (required.getRecommendedVersion() == null) {
+           return required.containsVersion(provided);
+       } else {
+           // if only one version assume that versions with a higher minor version are compatible
+           return required.getRecommendedVersion().getMajorVersion() == provided.getMajorVersion() && required.getRecommendedVersion().getMinorVersion() <= provided.getMinorVersion();
+       }
     }
 
     /**
@@ -352,18 +378,6 @@ public class RequireProvidedDependenciesInRuntimeClasspath
                 && artifact1.getGroupId().equals(artifact2.getGroupId())
                 && Objects.toString(artifact2.getClassifier(), "").equals(Objects.toString(artifact1.getClassifier(), ""))
                 && artifact1.getExtension().equals(artifact2.getExtension()));
-    }
-
-    private static final class SingleArtifactFilter implements DependencyFilter {
-        private final org.eclipse.aether.artifact.Artifact artifact;
-
-        public SingleArtifactFilter(org.eclipse.aether.artifact.Artifact artifact) {
-            this.artifact = artifact;
-        }
-        @Override
-        public boolean accept(DependencyNode node, List<DependencyNode> parents) {
-            return node.getDependency().getArtifact().equals(artifact);
-        }
     }
 
     public void setExcludes(List<String> theExcludes) {
