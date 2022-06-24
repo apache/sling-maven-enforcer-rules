@@ -51,6 +51,7 @@ public class RequireExplicitDependencyScope extends AbstractNonCacheableEnforcer
             List<Dependency> dependencies = project.getOriginalModel().getDependencies(); // this is the non-effective model but the original one without inheritance and interpolation resolved
             // check scope without considering inheritance
             for (Dependency dependency : dependencies) {
+                helper.getLog().debug("Found dependency " + dependency);
                 if (dependency.getScope() == null) {
                     MessageBuilder msgBuilder = MessageUtils.buffer();
                     helper.getLog().warn(msgBuilder.a("Dependency ").strong(dependency.getManagementKey()).a(" does not have an explicit scope defined!").toString());
