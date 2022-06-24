@@ -16,6 +16,8 @@ It provides additional [Maven Enforcer](https://maven.apache.org/enforcer/maven-
 
 ## Rules
 
+**Prerequisites:** `maven-enforcer-plugin` 3.0.0 or newer
+
 ### Require Provided Dependencies in Runtime Classpath (since version 1.0.0)
 
 Checks that the runtime classpath (e.g. used by Maven Plugins via the 
