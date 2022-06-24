@@ -40,7 +40,7 @@
     <properties>
         <sling.java.version>8</sling.java.version>
         <api.version>3.0.0</api.version>
-        <maven.version>3.1.1</maven.version><!-- must be the same version as used by enforcer-api due to shared classloader -->
+        <maven.version>3.1.1</maven.version><!-- must be the same version as used by m-enforcer-p/enforcer-api due to shared classloader -->
         <project.build.outputTimestamp>1654762702</project.build.outputTimestamp>
     </properties>
 
@@ -57,10 +57,12 @@
     </dependencyManagement>
 
     <dependencies>
+        <!-- the following two dependencies are always provided by the classloader from m-enforcer-p (https://issues.apache.org/jira/browse/MENFORCER-425) -->
         <dependency>
             <groupId>org.apache.maven.enforcer</groupId>
             <artifactId>enforcer-api</artifactId>
             <version>${api.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.maven.enforcer</groupId>
@@ -72,6 +74,7 @@
                     <artifactId>*</artifactId>
                 </exclusion>
             </exclusions>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
@@ -85,10 +88,12 @@
             <version>${maven.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!-- for colouring the messages -->
         <dependency>
-              <groupId>org.apache.maven.shared</groupId>
-              <artifactId>maven-shared-utils</artifactId>
-              <version>3.3.4</version>
+            <groupId>org.apache.maven.shared</groupId>
+            <artifactId>maven-shared-utils</artifactId>
+            <version>3.3.4</version>
+            <scope>compile</scope><!-- not provided by the m-enforcer-p classloader -->
         </dependency>
         <!-- as Maven Enforcer API still uses JSR305 null annotations we cannot yet switch to Jetbrains null annotations -->
         <dependency>
