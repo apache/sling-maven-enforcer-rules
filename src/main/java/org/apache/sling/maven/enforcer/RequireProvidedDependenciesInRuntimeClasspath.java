@@ -21,6 +21,7 @@ package org.apache.sling.maven.enforcer;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.text.ChoiceFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -109,13 +110,19 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         List<RemoteRepository> remoteRepositories;
         try {
             project = (MavenProject) helper.evaluate("${project}");
+            if (project == null) {
+                throw new ExpressionEvaluationException("${project} is null");
+            }
+            RepositorySystemSession repoSession = (RepositorySystemSession) helper.evaluate("${repositorySystemSession}");
+            if (repoSession == null) {
+                throw new ExpressionEvaluationException("${repositorySystemSession} is null");
+            }
             // get a new session to be able to tweak the dependency selector
-            newRepoSession = new DefaultRepositorySystemSession(
-                    (RepositorySystemSession) helper.evaluate("${repositorySystemSession}"));
+            newRepoSession = new DefaultRepositorySystemSession(repoSession);
             remoteRepositories = (List<RemoteRepository>) helper.evaluate("${project.remoteProjectRepositories}");
             repoSystem = helper.getComponent(RepositorySystem.class);
         } catch (ExpressionEvaluationException eee) {
-            throw new EnforcerRuleException("Unable to retrieve Maven project or repository system sesssion", eee);
+            throw new EnforcerRuleException("Cannot resolve expression: " + eee.getCause(), eee);
         } catch (ComponentLookupException cle) {
             throw new EnforcerRuleException("Unable to retrieve component RepositorySystem", cle);
         }
@@ -153,7 +160,8 @@ public class RequireProvidedDependenciesInRuntimeClasspath
                     rootDependency, repoSystem, newRepoSession, remoteRepositories, log);
             int numViolations = checkForMissingArtifacts(rootDependencyNode, runtimeArtifacts, log);
             if (numViolations > 0) {
-                throw new EnforcerRuleException("Found " + numViolations + " missing runtime dependencies. Look at the warnings emitted above for the details.");
+                ChoiceFormat dependenciesFormat = new ChoiceFormat("1#dependency|1<dependencies");
+                throw new EnforcerRuleException("Found " + numViolations + " missing runtime " + dependenciesFormat.format(numViolations) + ". Look at the warnings emitted above for the details.");
             }
         } catch (DependencyCollectionException e) {
             // draw graph

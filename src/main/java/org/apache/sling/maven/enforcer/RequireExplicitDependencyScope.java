@@ -62,7 +62,7 @@ public class RequireExplicitDependencyScope extends AbstractNonCacheableEnforcer
                 throw new EnforcerRuleException("Found " + numMissingDependencyScopes + " missing dependency " + scopesFormat.format(numMissingDependencyScopes) + ". Look at the warnings emitted above for the details.");
             }
         } catch (ExpressionEvaluationException eee) {
-            throw new EnforcerRuleException("Cannot resolve expression: " + eee.getCause(),  eee);
+            throw new EnforcerRuleException("Cannot resolve expression: " + eee.getCause(), eee);
         }
     }
 
