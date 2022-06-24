@@ -16,7 +16,7 @@ It provides additional [Maven Enforcer](https://maven.apache.org/enforcer/maven-
 
 ## Rules
 
-### Require Provided Dependencies in Runtime Classpath
+### Require Provided Dependencies in Runtime Classpath (since version 1.0.0)
 
 Checks that the runtime classpath (e.g. used by Maven Plugins via the 
 [Plugin Classloader](https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders) or by the [Appassembler Maven Plugin's `assemble` goal](http://www.mojohaus.org/appassembler/appassembler-maven-plugin/assemble-mojo.html)) contains all [provided dependencies](https://maven.apache.org/guides/introduction/introduction-to-dependency-mechanism.html#Dependency_Scope).
@@ -68,7 +68,52 @@ All parameters are optional.
                   </excludes>
                 </requireProvidedDependenciesInRuntimeClasspath>
               </rules>
-              <fail>true</fail>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+  [...]
+</project>
+```
+
+### Require Explicit Dependency Scope (since version 1.1.0)
+
+Checks that all dependencies have an explicitly declared scope in the non-effective pom (i.e. without taking inheritance or dependency management into account). Useful in case when the scope is no longer part of the dependencyManagement or in general to force making developers a distinct decision (prevents the default scope compile from being used for test dependencies)
+
+#### Parameters
+
+This rule does not support any parameters.
+
+#### Sample Plugin Configuration:
+
+```
+<project>
+  [...]
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.0.0</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.apache.sling</groupId>
+            <artifactId>maven-enforcer-rules</artifactId>
+            <version>LATEST</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <id>require-explicit-dependency-scope</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <requireExplicitDependencyScope implementation="org.apache.sling.maven.enforcer.RequireExplicitDependencyScope" />
+              </rules>
             </configuration>
           </execution>
         </executions>
