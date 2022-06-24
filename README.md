@@ -82,7 +82,7 @@ All parameters are optional.
 
 ### Require Explicit Dependency Scope (since version 1.1.0)
 
-Checks that all dependencies have an explicitly declared scope in the non-effective pom (i.e. without taking inheritance or dependency management into account). Useful in case when the scope is no longer part of the dependencyManagement or in general to force making developers a distinct decision (prevents the default scope compile from being used for test dependencies)
+Checks that all dependencies have an explicitly declared scope in the non-effective pom (i.e. without taking inheritance or dependency management into account). Useful when the scope is no longer part of the `dependencyManagement` or in general to force making developers a distinct decision (e.g. prevents the default scope compile being used for test dependencies by accident).
 
 #### Parameters
 
