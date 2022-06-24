@@ -29,6 +29,7 @@ import org.apache.maven.enforcer.rule.api.EnforcerRule2;
 import org.apache.maven.enforcer.rule.api.EnforcerRuleException;
 import org.apache.maven.enforcer.rule.api.EnforcerRuleHelper;
 import org.apache.maven.model.Dependency;
+import org.apache.maven.model.InputLocation;
 import org.apache.maven.plugins.enforcer.AbstractNonCacheableEnforcerRule;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.utils.logging.MessageBuilder;
@@ -54,7 +55,7 @@ public class RequireExplicitDependencyScope extends AbstractNonCacheableEnforcer
                 helper.getLog().debug("Found dependency " + dependency);
                 if (dependency.getScope() == null) {
                     MessageBuilder msgBuilder = MessageUtils.buffer();
-                    helper.getLog().warn(msgBuilder.a("Dependency ").strong(dependency.getManagementKey()).a(" does not have an explicit scope defined!").toString());
+                    helper.getLog().warn(msgBuilder.a("Dependency ").strong(dependency.getManagementKey()).a(" @ ").strong(formatLocation(dependency.getLocation(""))).a(" does not have an explicit scope defined!").toString());
                     numMissingDependencyScopes++;
                 }
             }
@@ -65,6 +66,30 @@ public class RequireExplicitDependencyScope extends AbstractNonCacheableEnforcer
         } catch (ExpressionEvaluationException eee) {
             throw new EnforcerRuleException("Cannot resolve expression: " + eee.getCause(), eee);
         }
+    }
+
+    /**
+     * Creates a string with line/column information for problems originating directly from this POM.
+     * Inspired by <a href="https://github.com/apache/maven/blob/d82ab09ae106131609efb8b98b67dae17b0780d0/maven-model-builder/src/main/java/org/apache/maven/model/building/ModelProblemUtils.java#L136-L173">ModelProblemUtils.formatLocation(...)</a>
+     *
+     * @param location The location which should be formatted, must not be {@code null}.
+     * @return The formatted problem location or an empty string if unknown, never {@code null}.
+     */
+    protected static String formatLocation(InputLocation location) {
+        StringBuilder buffer = new StringBuilder();
+        if (location.getLineNumber() > 0) {
+            if (buffer.length() > 0) {
+                buffer.append( ", " );
+            }
+            buffer.append("line ").append(location.getLineNumber());
+        }
+        if (location.getColumnNumber() > 0) {
+            if (buffer.length() > 0) {
+                buffer.append( ", " );
+            }
+            buffer.append("column ").append(location.getColumnNumber());
+        }
+        return buffer.toString();
     }
 
 }
