@@ -84,6 +84,8 @@ All parameters are optional.
 
 Checks that all dependencies have an explicitly declared scope in the non-effective pom (i.e. without taking inheritance or dependency management into account). Useful when the scope is no longer part of the `dependencyManagement` or in general to force making developers a distinct decision (e.g. prevents the default scope compile being used for test dependencies by accident).
 
+*This rule is part of `maven-enforcer-plugin` since version 3.2.1 [MENFORCER-423](https://issues.apache.org/jira/browse/MENFORCER-423), so should no longer be used from this module.*
+
 #### Parameters
 
 This rule does not support any parameters.
