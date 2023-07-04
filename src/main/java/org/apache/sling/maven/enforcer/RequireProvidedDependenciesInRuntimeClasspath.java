@@ -31,23 +31,21 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import javax.annotation.Nonnull;
+import javax.inject.Inject;
+import javax.inject.Named;
 
 import org.apache.maven.RepositoryUtils;
 import org.apache.maven.artifact.versioning.ArtifactVersion;
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.apache.maven.artifact.versioning.InvalidVersionSpecificationException;
 import org.apache.maven.artifact.versioning.VersionRange;
-import org.apache.maven.enforcer.rule.api.EnforcerRule2;
+import org.apache.maven.enforcer.rule.api.AbstractEnforcerRule;
+import org.apache.maven.enforcer.rule.api.EnforcerLogger;
 import org.apache.maven.enforcer.rule.api.EnforcerRuleException;
-import org.apache.maven.enforcer.rule.api.EnforcerRuleHelper;
-import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.plugins.enforcer.AbstractNonCacheableEnforcerRule;
+import org.apache.maven.execution.MavenSession;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.shared.utils.logging.MessageBuilder;
 import org.apache.maven.shared.utils.logging.MessageUtils;
-import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
-import org.codehaus.plexus.component.repository.exception.ComponentLookupException;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.RepositorySystemSession;
@@ -77,8 +75,8 @@ import org.eclipse.aether.util.graph.visitor.TreeDependencyVisitor;
  * 
  * This check is useful to make sure that a Maven Plugin has access to all necessary classes at run time. 
  */
-public class RequireProvidedDependenciesInRuntimeClasspath
-        extends AbstractNonCacheableEnforcerRule implements EnforcerRule2 {
+@Named("requireProvidedDependenciesInRuntimeClasspath")
+public class RequireProvidedDependenciesInRuntimeClasspath extends AbstractEnforcerRule {
 
     /** 
      * Specify the banned dependencies. This is a list of artifacts in format {@code <groupId>[:<artifactId>[:<extension>[:<classifier>]]]}. 
@@ -101,33 +99,19 @@ public class RequireProvidedDependenciesInRuntimeClasspath
      */
     private boolean includeDirects = false;
 
-    @SuppressWarnings("unchecked")
+    @Inject
+    private MavenProject project;
+    
+    @Inject
+    private MavenSession session;
+
+    @Inject
+    private RepositorySystem repoSystem;
+
     @Override
-    public void execute(@Nonnull EnforcerRuleHelper helper) throws EnforcerRuleException {
-        MavenProject project;
-        DefaultRepositorySystemSession newRepoSession;
-        RepositorySystem repoSystem;
-        List<RemoteRepository> remoteRepositories;
-        try {
-            project = (MavenProject) helper.evaluate("${project}");
-            if (project == null) {
-                throw new ExpressionEvaluationException("${project} is null");
-            }
-            RepositorySystemSession repoSession = (RepositorySystemSession) helper.evaluate("${repositorySystemSession}");
-            if (repoSession == null) {
-                throw new ExpressionEvaluationException("${repositorySystemSession} is null");
-            }
-            // get a new session to be able to tweak the dependency selector
-            newRepoSession = new DefaultRepositorySystemSession(repoSession);
-            remoteRepositories = (List<RemoteRepository>) helper.evaluate("${project.remoteProjectRepositories}");
-            repoSystem = helper.getComponent(RepositorySystem.class);
-        } catch (ExpressionEvaluationException eee) {
-            throw new EnforcerRuleException("Cannot resolve expression: " + eee.getCause(), eee);
-        } catch (ComponentLookupException cle) {
-            throw new EnforcerRuleException("Unable to retrieve component RepositorySystem", cle);
-        }
-        Log log = helper.getLog();
-        
+    public void execute() throws EnforcerRuleException {
+        // get a new session to be able to tweak the dependency selector
+        DefaultRepositorySystemSession newRepoSession = new DefaultRepositorySystemSession(session.getRepositorySession());
         Collection<DependencySelector> depSelectors = new ArrayList<>();
         depSelectors.add(new ScopeDependencySelector("test")); // exclude transitive and direct "test" dependencies of the rootDependency (i.e. the current project)
         // add also the exclude patterns
@@ -147,18 +131,17 @@ public class RequireProvidedDependenciesInRuntimeClasspath
         // use the ones for https://maven.apache.org/guides/mini/guide-maven-classloading.html#3-plugin-classloaders
         @SuppressWarnings("deprecation")
         List<org.eclipse.aether.artifact.Artifact> runtimeArtifacts = project.getRuntimeArtifacts().stream().map(RepositoryUtils::toArtifact).collect(Collectors.toList());
-        if (log.isDebugEnabled()) {
-            log.debug("Collected " + runtimeArtifacts.size()+ " runtime dependencies ");
-            for (Artifact runtimeArtifact : runtimeArtifacts) {
-                log.debug(runtimeArtifact.toString());
-            }
+        // no guard supported here due to https://issues.apache.org/jira/browse/MENFORCER-488
+        getLog().debug("Collected " + runtimeArtifacts.size()+ " runtime dependencies ");
+        for (Artifact runtimeArtifact : runtimeArtifacts) {
+            getLog().debug(runtimeArtifact.toString());
         }
 
         Dependency rootDependency = RepositoryUtils.toDependency(project.getArtifact(), null);
         try {
             DependencyNode rootDependencyNode = collectTransitiveDependencies(
-                    rootDependency, repoSystem, newRepoSession, remoteRepositories, log);
-            int numViolations = checkForMissingArtifacts(rootDependencyNode, runtimeArtifacts, log);
+                    rootDependency, repoSystem, newRepoSession, project.getRemoteProjectRepositories());
+            int numViolations = checkForMissingArtifacts(rootDependencyNode, runtimeArtifacts);
             if (numViolations > 0) {
                 ChoiceFormat dependenciesFormat = new ChoiceFormat("1#dependency|1<dependencies");
                 throw new EnforcerRuleException("Found " + numViolations + " missing runtime " + dependenciesFormat.format(numViolations) + ". Look at the warnings emitted above for the details.");
@@ -267,12 +250,12 @@ public class RequireProvidedDependenciesInRuntimeClasspath
 
     private static final class MissingArtifactsDependencyVisitor implements DependencyVisitor {
         private final List<Artifact> artifacts;
-        private final Log log;
+        private final EnforcerLogger log;
         private int numMissingArtifacts;
         private final Deque<DependencyNode> nodeStack; // all intermediate nodes (without the root node)
         private boolean isRoot;
 
-        MissingArtifactsDependencyVisitor(List<Artifact> artifacts, Log log) {
+        MissingArtifactsDependencyVisitor(List<Artifact> artifacts, EnforcerLogger log) {
             this.artifacts = artifacts;
             this.log = log;
             numMissingArtifacts = 0;
@@ -288,11 +271,11 @@ public class RequireProvidedDependenciesInRuntimeClasspath
                 try {
                     if (!isCompatibleArtifactContainedInList(dependencyNode.getArtifact(), artifacts, log)) {
                         MessageBuilder msgBuilder = MessageUtils.buffer();
-                        log.warn(msgBuilder.a("Dependency ").strong(dependencyNode.getDependency()).mojo(dumpIntermediatePath(nodeStack)).a(" not found as runtime dependency!").toString());
+                        log.warnOrError(msgBuilder.a("Dependency ").strong(dependencyNode.getDependency()).mojo(dumpIntermediatePath(nodeStack)).a(" not found as runtime dependency!").toString());
                         numMissingArtifacts++;
                     }
                 } catch (InvalidVersionSpecificationException e) {
-                    log.error("Invalid version given for artifact " + dependencyNode.getArtifact(), e);
+                    log.error("Invalid version given for artifact " + dependencyNode.getArtifact() + ": " + e.getCause());
                 }
                 nodeStack.addLast(dependencyNode);
             }
@@ -324,30 +307,30 @@ public class RequireProvidedDependenciesInRuntimeClasspath
     protected DependencyNode collectTransitiveDependencies(
             org.eclipse.aether.graph.Dependency rootDependency,
             RepositorySystem repoSystem, RepositorySystemSession repoSession,
-            List<RemoteRepository> remoteRepositories, Log log)
+            List<RemoteRepository> remoteRepositories)
             throws DependencyCollectionException {
         CollectRequest collectRequest = new CollectRequest(rootDependency, remoteRepositories);
         CollectResult collectResult = repoSystem.collectDependencies(repoSession, collectRequest);
-        if (log.isDebugEnabled()) {
+        
+        getLog().debug(() -> {
             // draw full dependency graph
             StringWriter writer = new StringWriter();
             DependencyVisitor depVisitor = new TreeDependencyVisitor(
                     new DependencyVisitorPrinter(new PrintWriter(writer)));
             collectResult.getRoot().accept(depVisitor);
-            log.debug("dependency tree: " + writer.toString());
-        }
+            return "dependency tree: " + writer.toString();
+        });
         return collectResult.getRoot();
     }
 
-    protected int checkForMissingArtifacts(DependencyNode rootDependencyNode, List<Artifact> runtimeArtifacts,
-            Log log) {
-        MissingArtifactsDependencyVisitor depVisitor = new MissingArtifactsDependencyVisitor(runtimeArtifacts, log);
+    protected int checkForMissingArtifacts(DependencyNode rootDependencyNode, List<Artifact> runtimeArtifacts) {
+        MissingArtifactsDependencyVisitor depVisitor = new MissingArtifactsDependencyVisitor(runtimeArtifacts, getLog());
         rootDependencyNode.accept(depVisitor);
         return depVisitor.getNumMissingArtifacts();
     }
 
     protected static boolean isCompatibleArtifactContainedInList(Artifact artifact,
-            List<Artifact> artifacts, Log log) throws InvalidVersionSpecificationException {
+            List<Artifact> artifacts, EnforcerLogger log) throws InvalidVersionSpecificationException {
         for (Artifact artifactInList : artifacts) {
             if (areArtifactsEqualDisregardingVersion(artifact, artifactInList)) {
                 // check version compatibility
@@ -355,7 +338,7 @@ public class RequireProvidedDependenciesInRuntimeClasspath
                     return true;
                 } else {
                     MessageBuilder msgBuilder = MessageUtils.buffer();
-                    log.warn("Found provided dependency " + msgBuilder.strong(artifact).a(" only with potentially incompatible version ").strong(artifactInList.getVersion()).toString() + " in runtime classpath");
+                    log.warnOrError("Found provided dependency " + msgBuilder.strong(artifact).a(" only with potentially incompatible version ").strong(artifactInList.getVersion()).toString() + " in runtime classpath");
                 }
             }
         }
