@@ -16,7 +16,7 @@ It provides additional [Maven Enforcer](https://maven.apache.org/enforcer/maven-
 
 ## Rules
 
-**Prerequisites:** `maven-enforcer-plugin` 3.0.0 or newer
+**Prerequisites:** `maven-enforcer-plugin` 3.2.1 or newer
 
 ### Require Provided Dependencies in Runtime Classpath (since version 1.0.0)
 
@@ -25,13 +25,13 @@ Checks that the runtime classpath (e.g. used by Maven Plugins via the
 
 As those are not transitively inherited they need to be declared explicitly in the pom.xml of the using Maven project.
 
-The check assumes semantic versioning, i.e. for provided dependencies without a version range all compatible runtime dependencies are accepted (i.e. ones that share groupId, artifactId, classifier and extension, and have the same major version and minor version which is equal or higher to the one of the provided dependency.
+The check assumes semantic versioning, i.e. for provided dependencies without a version range all compatible runtime dependencies are accepted (i.e. ones that share groupId, artifactId, classifier and extension, and have the same major version and minor version which is equal or higher to the one of the provided dependency).
 
 #### Parameters
 
 All parameters are optional.
 
- * `excludes` - a list of dependencies to skip. Their transitive dependencies are not evaluated either. The format is `<groupId>[:<artifactId>[:<extension>[:<classifier>]]]`. Wild cards (`*`) may be used to replace an entire part of a section. *Examples*: 
+ * `excludes` - a list of dependencies to skip. Their transitive dependencies are not evaluated either. The format is `<groupId>[:<artifactId>[:<extension>[:<classifier>]]]`. Wildcards (`*`) may be used to replace an entire part of a section. *Examples*: 
      * `org.apache.maven` (everything with the given group)
      * `org.apache.maven:myArtifact`
      * `org.apache.maven:*:jar`
@@ -48,7 +48,7 @@ All parameters are optional.
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
-        <version>3.0.0</version>
+        <version>3.3.0</version>
         <dependencies>
           <dependency>
             <groupId>org.apache.sling</groupId>
@@ -64,7 +64,7 @@ All parameters are optional.
             </goals>
             <configuration>
               <rules>
-                <requireProvidedDependenciesInRuntimeClasspath implementation="org.apache.sling.maven.enforcer.RequireProvidedDependenciesInRuntimeClasspath">
+                <requireProvidedDependenciesInRuntimeClasspath>
                   <excludes>
                     <exclude>javax.servlet:javax.servlet-api</exclude>
                   </excludes>
@@ -80,50 +80,6 @@ All parameters are optional.
 </project>
 ```
 
-### Require Explicit Dependency Scope (since version 1.1.0)
+### Require Explicit Dependency Scope (no longer available since 1.2.0)
 
-Checks that all dependencies have an explicitly declared scope in the non-effective pom (i.e. without taking inheritance or dependency management into account). Useful when the scope is no longer part of the `dependencyManagement` or in general to force making developers a distinct decision (e.g. prevents the default scope compile being used for test dependencies by accident).
-
-*This rule is part of `maven-enforcer-plugin` since version 3.2.1 ([MENFORCER-423](https://issues.apache.org/jira/browse/MENFORCER-423)), so should no longer be used from this module.*
-
-#### Parameters
-
-This rule does not support any parameters.
-
-#### Sample Plugin Configuration:
-
-```
-<project>
-  [...]
-  <build>
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-enforcer-plugin</artifactId>
-        <version>3.0.0</version>
-        <dependencies>
-          <dependency>
-            <groupId>org.apache.sling</groupId>
-            <artifactId>maven-enforcer-rules</artifactId>
-            <version>LATEST</version>
-          </dependency>
-        </dependencies>
-        <executions>
-          <execution>
-            <id>require-explicit-dependency-scope</id>
-            <goals>
-              <goal>enforce</goal>
-            </goals>
-            <configuration>
-              <rules>
-                <requireExplicitDependencyScope implementation="org.apache.sling.maven.enforcer.RequireExplicitDependencyScope" />
-              </rules>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-    </plugins>
-  </build>
-  [...]
-</project>
-```
+*This rule is [part of `maven-enforcer-plugin`](https://maven.apache.org/enforcer/enforcer-rules/requireExplicitDependencyScope.html) since version 3.2.1 ([MENFORCER-423](https://issues.apache.org/jira/browse/MENFORCER-423)), and therefore was removed from this module.*
