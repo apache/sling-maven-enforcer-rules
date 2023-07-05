@@ -26,7 +26,7 @@
         <version>49</version>
     </parent>
     <artifactId>maven-enforcer-rules</artifactId>
-    <version>1.2.0</version>
+    <version>1.2.1-SNAPSHOT</version>
     <name>Maven Enforcer Rules</name>
     <description>Custom Maven Enforcer rules specifically targeted at working with OSGi bundle modules</description>
 
@@ -34,7 +34,7 @@
         <connection>scm:git:https://gitbox.apache.org/repos/asf/sling-maven-enforcer-rules.git</connection>
         <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/sling-maven-enforcer-rules.git</developerConnection>
         <url>https://gitbox.apache.org/repos/asf?p=sling-maven-enforcer-rules.git</url>
-      <tag>maven-enforcer-rules-1.2.0</tag>
+      <tag>HEAD</tag>
   </scm>
 
     <properties>
@@ -42,7 +42,7 @@
         <api.version>3.2.1</api.version>
         <maven.version>3.2.5</maven.version><!-- must be the same version as used by m-enforcer-p/enforcer-api due to shared classloader -->
         <aether.version>1.0.0.v20140518</aether.version><!-- the same as in Maven 3.2.5 -->
-        <project.build.outputTimestamp>1688551323</project.build.outputTimestamp>
+        <project.build.outputTimestamp>1688551335</project.build.outputTimestamp>
     </properties>
 
     <dependencyManagement>
