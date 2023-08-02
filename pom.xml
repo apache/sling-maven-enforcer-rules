@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.sling</groupId>
         <artifactId>sling</artifactId>
-        <version>49</version>
+        <version>50-SNAPSHOT</version>
     </parent>
     <artifactId>maven-enforcer-rules</artifactId>
     <version>1.2.1-SNAPSHOT</version>
@@ -58,13 +58,14 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- the following two dependencies are always provided by the classloader from m-enforcer-p (https://issues.apache.org/jira/browse/MENFORCER-425) -->
+        <!-- the following dependency is always provided by the classloader from m-enforcer-p (https://issues.apache.org/jira/browse/MENFORCER-425) -->
         <dependency>
             <groupId>org.apache.maven.enforcer</groupId>
             <artifactId>enforcer-api</artifactId>
             <version>${api.version}</version>
             <scope>provided</scope>
         </dependency>
+        <!-- exposed through the Maven API classloader (https://maven.apache.org/guides/mini/guide-maven-classloading.html#api-classloader) -->
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-core</artifactId>
@@ -83,6 +84,13 @@
             <version>${aether.version}</version>
             <scope>provided</scope>
         </dependency>
+         <dependency>
+            <groupId>javax.inject</groupId>
+            <artifactId>javax.inject</artifactId>
+            <version>1</version>
+            <scope>provided</scope>
+        </dependency>
+        <!-- regular dependencies -->
         <dependency>
             <groupId>org.eclipse.aether</groupId>
             <artifactId>aether-util</artifactId>
@@ -94,13 +102,7 @@
             <groupId>org.apache.maven.shared</groupId>
             <artifactId>maven-shared-utils</artifactId>
             <version>3.3.4</version>
-            <scope>compile</scope><!-- not provided by the m-enforcer-p classloader -->
-        </dependency>
-        <dependency>
-            <groupId>javax.inject</groupId>
-            <artifactId>javax.inject</artifactId>
-            <version>1</version>
-            <scope>provided</scope>
+            <scope>compile</scope>
         </dependency>
         <!-- as Maven Enforcer API still uses JSR305 null annotations we cannot yet switch to Jetbrains null annotations -->
         <dependency>
