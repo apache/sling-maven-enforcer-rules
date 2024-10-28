@@ -40,7 +40,7 @@
     <properties>
         <sling.java.version>8</sling.java.version>
         <api.version>3.2.1</api.version>
-        <maven.version>3.2.5</maven.version><!-- must be the same version as used by m-enforcer-p/enforcer-api due to shared classloader -->
+        <maven.version>3.8.1</maven.version><!-- must be the same version as used by m-enforcer-p/enforcer-api due to shared classloader -->
         <aether.version>1.0.0.v20140518</aether.version><!-- the same as in Maven 3.2.5 -->
         <project.build.outputTimestamp>1688551630</project.build.outputTimestamp>
     </properties>
